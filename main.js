@@ -8,6 +8,8 @@ const notesFolder = config.notesFolder;
 const token = JSON.parse(fs.readFileSync("./token.json", 'utf-8'))
 const bot = new TelegramBot(token.id, {polling: true});
 
+let lastWriteLocation = undefined;
+
 bot.onText(/\/start/, (msg) => {
 
 	if(msg.from.is_bot == true) return;
@@ -55,6 +57,8 @@ bot.onText(/\/add/, (msg) => {
 	fs.appendFile(saveLocation, saveText, function (err) {
 		if (err) throw err;
 	});
+
+	lastWriteLocation = args[0] + '.txt';
 
 	const note = `New note added to "${saveLocation.substr(saveLocation.lastIndexOf('/') + 1)}": ${saveText}`;
 	bot.sendMessage(msg.chat.id, note);
@@ -165,6 +169,55 @@ bot.onText(/\/delete/, (msg) => {
 
 });
 
+bot.onText(/\/undo/, (msg) => {
+
+	if(msg.from.is_bot == true) return;
+	if(msg.from.id != ownerId) return console.log(`Illegal access attempt: ${msg.from.id} '${msg.from.first_name}'`);
+
+	if (lastWriteLocation == undefined) return bot.sendMessage(msg.chat.id, 'Error: There is nothing to undo!');
+
+	const filename = lastWriteLocation; 
+
+	const fileList = fs.readdirSync(notesFolder).filter(file => file.endsWith('.txt'));
+	const fileList_String = fileList.toString();
+	const fileList_Array = fileList_String.split(",");
+
+	if (!searchForFilename(filename, fileList_Array)) bot.sendMessage(msg.chat.id, "Error: Target file not found!");
+	else{
+		try {
+			const fileContents = fs.readFileSync(notesFolder + filename).toString();
+			let fileContents_Array = fileContents.split(/\r?\n/);
+
+			fileContents_Array = fileContents_Array.slice(0, fileContents_Array.length - 2);
+			fileContents_Array[fileContents_Array.length] = "";
+
+			fileContents_String = fileContents_Array.join('\n');
+
+			saveLocation = lastWriteLocation;
+
+			try {
+				fs.writeFileSync(`${notesFolder}${saveLocation}`, fileContents_String);
+			} catch (err) {
+				console.error(err);
+				console.log(fileContents_String);
+				return bot.sendMessage(msg.chat.id, "Error: CRITICAL WRITE ERROR!\nIntended output dumped to console!");
+			}
+
+			lastWriteLocation = undefined;
+
+			const note = `Undone last write to "${filename}"!`;
+			bot.sendMessage(msg.chat.id, note);
+			console.log(note);
+
+			return;
+		}
+		catch { 
+			return bot.sendMessage(msg.chat.id, "Error: Unable to undo!");
+		}
+	}
+
+});
+
 bot.on('message', (msg) => {
 
 	if(msg.from.is_bot == true) return;
@@ -189,6 +242,8 @@ bot.on('message', (msg) => {
 			if (err) throw err;
 		});
 
+		lastWriteLocation = `${saveLocation}.txt`;
+
 		const note = `New note added to "${saveLocation}.txt": ${saveText}`;
 		bot.sendMessage(msg.chat.id, note);
 		console.log(note);
@@ -204,6 +259,8 @@ bot.on('message', (msg) => {
 	fs.appendFile(`${notesFolder}${saveLocation}`, saveText, function (err) {
 		if (err) throw err;
 	});
+
+	lastWriteLocation = saveLocation;
 
 	const note = `New note added to "${saveLocation}": ${saveText}`;
 	bot.sendMessage(msg.chat.id, note);
