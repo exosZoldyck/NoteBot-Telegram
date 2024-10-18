@@ -16,6 +16,19 @@ const bot = new TelegramBot(token.id, {polling: true});
 
 let lastWriteLocation = undefined;
 
+/*
+Command descriptions: 
+	start - Welcome message
+	list - Print out a list of all existing files
+	add - Write a new line to a file
+	undo - Undoes the last write operation performed 
+	info - Shows some basic info about the file
+	download - Send a file for download
+	print - Send a file in the form of text messages
+	tail - Send the last line of a file in the form of a text message
+	delete - Permanently delete a file
+*/
+
 bot.onText(/\/start/, (msg) => {
 	if(msg.from.is_bot == true) return;
 	if(msg.from.id != ownerId) return console.log(`Illegal access attempt: ${msg.from.id} '${msg.from.first_name}'`);
