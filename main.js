@@ -1,5 +1,11 @@
+// Made by exosZoldyck
+
+const version = "1.1.0";
+
 const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
+
+createDefaultFiles();
 
 var config = JSON.parse(fs.readFileSync("./config.json", 'utf-8'))
 const ownerId = config.ownerId;
@@ -11,16 +17,13 @@ const bot = new TelegramBot(token.id, {polling: true});
 let lastWriteLocation = undefined;
 
 bot.onText(/\/start/, (msg) => {
-
 	if(msg.from.is_bot == true) return;
 	if(msg.from.id != ownerId) return console.log(`Illegal access attempt: ${msg.from.id} '${msg.from.first_name}'`);
 
 	bot.sendMessage(msg.chat.id, "Welcome to NoteBot!");
-	
 });
 
 bot.onText(/\/list/, (msg) => {
-
 	if(msg.from.is_bot == true) return;
 	if(msg.from.id != ownerId) return console.log(`Illegal access attempt: ${msg.from.id} '${msg.from.first_name}'`);
 
@@ -34,11 +37,9 @@ bot.onText(/\/list/, (msg) => {
 	}
 
 	bot.sendMessage(msg.chat.id, listMsg);
-
 });
 
 bot.onText(/\/add/, (msg) => {
-
 	if(msg.from.is_bot == true) return;
 	if(msg.from.id != ownerId) return console.log(`Illegal access attempt: ${msg.from.id} '${msg.from.first_name}'`);
 
@@ -54,22 +55,14 @@ bot.onText(/\/add/, (msg) => {
 
 	if (saveText == " " || saveText == "" || !saveText) return;
 
-	fs.appendFile(saveLocation, saveText, function (err) {
-		if (err) throw err;
-	});
+	writeToFile(saveLocation, saveText, msg);
 
 	lastWriteLocation = args[0] + '.txt';
-
-	const note = `New note added to "${saveLocation.substr(saveLocation.lastIndexOf('/') + 1)}": ${saveText}`;
-	bot.sendMessage(msg.chat.id, note);
-	console.log(note);
 	
 	setDefaultNoteFilename(saveLocation.substr(saveLocation.lastIndexOf('/') + 1));
-
 });
 
 bot.onText(/\/download/, (msg) => {
-
 	if(msg.from.is_bot == true) return;
 	if(msg.from.id != ownerId) return console.log(`Illegal access attempt: ${msg.from.id} '${msg.from.first_name}'`);
 
@@ -90,11 +83,57 @@ bot.onText(/\/download/, (msg) => {
 	else{
 		bot.sendMessage(msg.chat.id, "Error: File could not be found!");
 	}
+});
 
+bot.onText(/\/info/, (msg) => {
+	if(msg.from.is_bot == true) return;
+	if(msg.from.id != ownerId) return console.log(`Illegal access attempt: ${msg.from.id} '${msg.from.first_name}'`);
+
+	if (msg.text == undefined || msg.text == "" || !msg.text.includes(' ')) return bot.sendMessage(msg.chat.id, 'Invalid command: Must contain arguments!');;
+	const args = msg.text.substr(msg.text.indexOf(' ') + 1).split(' ');
+
+	if (args[0] == undefined || args[0] == "") return bot.sendMessage(msg.chat.id, 'Invalid command: Must contain filename!');
+
+	const fileList = fs.readdirSync(notesFolder).filter(file => file.endsWith('.txt'));
+	const fileList_String = fileList.toString();
+	const fileList_Array = fileList_String.split(",");
+
+	const filename = args[0] + ".txt";
+
+	if (searchForFilename(filename, fileList_Array)){
+		const fileInfo = fs.statSync(notesFolder + filename);
+		const fileText = fs.readFileSync(notesFolder + filename, 'utf-8');
+		if (fileInfo == undefined) return bot.sendMessage(msg.chat.id, "Error: File info could not be read!");
+		if (fileText == undefined) return bot.sendMessage(msg.chat.id, "Error: File text could not be read!");
+
+		let sizeText = "";
+		const size = fileInfo.size;
+		if (size == undefined || isNaN(size) || size < 0) return bot.sendMessage(msg.chat.id, "Error: Invalid file size!");
+
+		if (size < 1000) sizeText = `${size}B`;
+		else if (size >= 1000) sizeText = `${size / (1000)}KB`;
+		else if ((size / 1000) >= 1000) sizeText = `${size / (1000 * 1000)}MB`;
+		else sizeText = `${size / (1000 * 1000 * 1000)}GB`;
+
+		let fileText_array = fileText.split(/(\r\n|\n|\r)/gm);
+		if (fileList_Array == undefined) bot.sendMessage(msg.chat.id, "Error: Invalid line count!");
+		let fileText_length = fileText_array.length;
+
+		console.log(fileText_array)
+
+		for (let i = 0; i < fileText_array.length; i++){
+			if (fileText_array[i] == "" || fileText_array[i] == "\n") fileText_length--;
+		}
+
+		const infoText = `${filename} --> ${fileText_length} lines, ${sizeText}`;
+		bot.sendMessage(msg.chat.id, infoText);
+	}
+	else{
+		return bot.sendMessage(msg.chat.id, "Error: File could not be found!");
+	}
 });
 
 bot.onText(/\/print/, (msg) => {
-
 	if(msg.from.is_bot == true) return;
 	if(msg.from.id != ownerId) return console.log(`Illegal access attempt: ${msg.from.id} '${msg.from.first_name}'`);
 
@@ -133,7 +172,6 @@ bot.onText(/\/print/, (msg) => {
 });
 
 bot.onText(/\/delete/, (msg) => {
-
 	if(msg.from.is_bot == true) return;
 	if(msg.from.id != ownerId) return console.log(`Illegal access attempt: ${msg.from.id} '${msg.from.first_name}'`);
 
@@ -166,11 +204,9 @@ bot.onText(/\/delete/, (msg) => {
 			return;
 		}
 	}
-
 });
 
 bot.onText(/\/undo/, (msg) => {
-
 	if(msg.from.is_bot == true) return;
 	if(msg.from.id != ownerId) return console.log(`Illegal access attempt: ${msg.from.id} '${msg.from.first_name}'`);
 
@@ -205,7 +241,7 @@ bot.onText(/\/undo/, (msg) => {
 
 			lastWriteLocation = undefined;
 
-			const note = `Undone last write to "${filename}"!`;
+			const note = `Undone last write to "${filename}"!\n`;
 			bot.sendMessage(msg.chat.id, note);
 			console.log(note);
 
@@ -215,11 +251,51 @@ bot.onText(/\/undo/, (msg) => {
 			return bot.sendMessage(msg.chat.id, "Error: Unable to undo!");
 		}
 	}
+});
 
+bot.onText(/\/tail/, (msg) => {
+	if(msg.from.is_bot == true) return;
+	if(msg.from.id != ownerId) return console.log(`Illegal access attempt: ${msg.from.id} '${msg.from.first_name}'`);
+
+	if (msg.text == undefined || msg.text == "" || !msg.text.includes(' ')) return bot.sendMessage(msg.chat.id, 'Invalid command: Must contain arguments!');;
+	const args = msg.text.substr(msg.text.indexOf(' ') + 1).split(' ');
+
+	if (args[0] == undefined || args[0] == "") return bot.sendMessage(msg.chat.id, 'Invalid command: Must contain filename!');
+
+	const fileList = fs.readdirSync(notesFolder).filter(file => file.endsWith('.txt'));
+	const fileList_String = fileList.toString();
+	const fileList_Array = fileList_String.split(",");
+
+	const filename = args[0] + ".txt";
+
+	if (searchForFilename(filename, fileList_Array)){
+		try {
+			const fileText_array = fs.readFileSync(notesFolder + filename, 'utf-8').split(/(\r\n|\n|\r)/gm);
+			for (let i = 0; i < fileText_array.length; i++){
+				if (fileText_array[i] == "\n" || fileText_array[i] == "" || fileText_array[i].length === 0) fileText_array.splice(i, 1);
+			}
+
+			const fileTextTail = fileText_array[fileText_array.length - 2];
+			if (fileTextTail.length > 4094) {
+				bot.sendMessage(msg.chat.id, "Error: Tail was too big to send!");
+
+				return;
+			}
+			
+			// Send message if tail is not too big
+
+			bot.sendMessage(msg.chat.id, fileTextTail);
+		}
+		catch {
+			bot.sendMessage(msg.chat.id, "Error: File could not be sent.") 
+		}
+	}
+	else{
+		bot.sendMessage(msg.chat.id, "Error: File could not be found!");
+	}
 });
 
 bot.on('message', (msg) => {
-
 	if(msg.from.is_bot == true) return;
 	if(msg.from.id != ownerId) return console.log(`Illegal access attempt: ${msg.from.id} '${msg.from.first_name}'`);
 
@@ -238,15 +314,9 @@ bot.on('message', (msg) => {
 
 		let saveText = (msg.text.includes('?')) ? msg.text.substr(0, msg.text.indexOf('?')).trimStart().trimEnd() + '\n' : msg.text.trimStart().trimEnd() + '\n';
 
-		fs.appendFile(`${notesFolder}${saveLocation}.txt`, saveText, function (err) {
-			if (err) throw err;
-		});
+		writeToFile(`${notesFolder}${saveLocation}.txt`, saveText, msg);
 
 		lastWriteLocation = `${saveLocation}.txt`;
-
-		const note = `New note added to "${saveLocation}.txt": ${saveText}`;
-		bot.sendMessage(msg.chat.id, note);
-		console.log(note);
 
 		return;
 	}
@@ -256,16 +326,58 @@ bot.on('message', (msg) => {
 	const saveLocation = config.defaultNoteFilename;
 	const saveText = msg.text.trimStart().trimEnd() + '\n';
 
-	fs.appendFile(`${notesFolder}${saveLocation}`, saveText, function (err) {
-		if (err) throw err;
-	});
+	writeToFile(`${notesFolder}${saveLocation}`, saveText, msg);
 
 	lastWriteLocation = saveLocation;
-
-	const note = `New note added to "${saveLocation}": ${saveText}`;
-	bot.sendMessage(msg.chat.id, note);
-	console.log(note);
 });
+
+function createDefaultFiles(){
+	if(!fs.existsSync('./config.json')){
+		fs.writeFileSync('./config.json', `{"defaultNoteFilename":"notes.txt","ownerId":"<your Telegram ID goes here>","notesFolder":"./notes/"}`);
+		console.log("WARNING: Owner Telegram ID not set in 'config.json'");
+	}
+	if(!fs.existsSync('./token.json')){
+		fs.writeFileSync('./token.json', `{"id":"<your bot token goes here>"}`);
+		console.log("WARNING: Bot token not set in 'token.json'");
+	}
+	if(!fs.existsSync('./notes')){
+		fs.mkdirSync('./notes');
+	}
+}
+
+function writeToFile(saveLocation, saveText, msg){
+	try{
+		fs.appendFileSync(saveLocation, saveText);
+		/*
+		fs.appendFile(`${notesFolder}${saveLocation}.txt`, saveText, function (err) {
+			if (err) throw err;
+		});
+		*/
+
+		// Send a write confirmation to user and console
+		const saveLocation_note = (saveLocation.includes('/')) ? saveLocation.slice(saveLocation.lastIndexOf('/') + 1) : saveLocation;
+		const note = `New note added to "${saveLocation_note}": ${saveText}`;
+		bot.sendMessage(msg.chat.id, note);
+		console.log(note);
+
+		// Read the write location file and split its contents into an array
+		let  text_array = fs.readFileSync(saveLocation, 'utf-8').split(/(\r\n|\n|\r)/gm);
+		for (let i = 0; i < text_array.length; i++){
+			if (text_array[i] == "\n" || text_array[i] == "" || text_array[i].length === 0) text_array.splice(i, 1);
+		}
+
+		// Check if file already contains an identical entry
+		for (let i = 0; i < text_array.length - 2; i++){
+			if (text_array[i] == "" || text_array[i] == "\n") continue;
+			if (text_array[i] === saveText.trimEnd()){
+				bot.sendMessage(msg.chat.id, `Warning: "${saveLocation_note}" already contains this entry!`);
+				break;
+			}
+		}
+	} catch(err) {
+		console.error(err);
+	}
+}
 
 function setDefaultNoteFilename(filename){
 	if (filename.includes('/') || filename.includes('\\')) return;
@@ -274,7 +386,7 @@ function setDefaultNoteFilename(filename){
 	const data = JSON.stringify(config);
 	fs.writeFileSync('./config.json', data);
 
-	//console.log(`Default note filename changed to "${filename}"`);
+	// console.log(`Default note filename changed to "${filename}"`);
 }
 
 function searchForFilename(searchName, searchList){
@@ -287,4 +399,4 @@ function searchForFilename(searchName, searchList){
 	return false;
 }
 
-if (bot != undefined) console.log("NoteBot is online!\n");
+if (bot != undefined) console.log(`NoteBot v${version} is online!\n`);
